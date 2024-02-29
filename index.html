@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+
+    <title>ZIM - Code Creativity</title>
+
+    <!-- zimjs.com - JavaScript Canvas Framework -->
+    <script type="module">
+      import zim from "https://zimjs.com/cdn/016/zim";
+
+      // See Docs under Frame for FIT, FILL, FULL, and TAG
+      new Frame(FIT, 1024, 768, green, dark, ready, ["maus.png"], "assets/");
+      function ready() {
+        // given F (Frame), S (Stage), W (width), H (height)
+        // put code here
+        let container_intro;
+        let container_outro;
+        let game_running = false;
+        let anzahl = 30;
+        let maus;
+        let score;
+        let highscore = 0;
+        let label_score;
+        let label_highscore;
+        let is_blackphase = false;
+        let black_interval;
+        let countdown_interval;
+        let final_score;
+        let label_countdown;
+        let countdown = 30; //set same at restart
+        let alltimehighscore = 3;
+        let alltimename = "Dummy-Gamer";
+        let container_hs;
+
+        intro();
+
+        function getData() {
+          fetch("getData.php", {
+            method: "GET",
+          })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            })
+            .then((data) => {
+              console.log(data);
+              alltimehighscore = data.score;
+              alltimename = data.name;
+            })
+            .catch((error) => {
+              console.error("Error fetching data:", error);
+              // Display user-friendly error message (optional)
+              alert(
+                "An error occurred while fetching data. Please try again later."
+              );
+            });
+        }
+
+        function updateData(name, score) {
+          fetch("updateData.php", {
+            method: "POST",
+            body: new URLSearchParams({ name, score }),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            })
+            .then((data) => {
+              console.log(data); // Handle success message
+              zog("Highscore sucessfully saved to database!");
+            })
+            .catch((error) => {
+              console.error("Error updating data:", error);
+              // Display user-friendly error message (optional)
+              alert(
+                "An error occurred while updating data. Please try again later."
+              );
+            });
+        }
+
+        function intro() {
+          // get all-time high-score from mySQL DB
+          getData();
+
+          // Intro Page:
+          container_intro = new Container(W, H).addTo();
+
+          const loa = new LabelOnArc({
+            label:
+              "GAME DESIGN: Max Erni   IDEA: Mia Erni   PROGRAMMING: Andi Erni",
+            color: black,
+            size: 38,
+            radius: 300,
+          }).center(container_intro);
+          zog(loa.text);
+
+          new Pic("maus.png", null, null, true)
+            .centerReg(container_intro)
+            .mov(-10, -10)
+            .rot(90);
+
+          new Button(200, 60, "START")
+            .center(container_intro)
+            .mov(3, 300)
+            .tap(() => {
+              container_intro.removeFrom();
+              start();
+            });
+        }
+
+        function makeBlack() {
+          if (game_running) {
+            F.color = black;
+            label_countdown.color = white;
+            label_score.color = white;
+            label_highscore.color = white;
+            is_blackphase = true;
+            timeout(rand(1, 6), () => {
+              F.color = green;
+              label_countdown.color = black;
+              label_score.color = black;
+              label_highscore.color = black;
+              is_blackphase = false;
+            });
+          } else {
+            black_interval.clear();
+            F.color = black;
+          }
+        }
+
+        function reduceonesecond() {
+          countdown -= 1;
+          label_countdown.text = "Countdown: " + countdown;
+        }
+
+        function start() {
+          game_running = true;
+          is_blackphase = false;
+          countdown = 30;
+          F.color = green;
+          score = 0;
+          label_score = new Label("Score: " + score).pos(20, 20);
+          label_highscore = new Label("High-Score: " + highscore).pos(390, 20);
+          label_countdown = new Label("Countdown: " + countdown).pos(750, 20);
+
+          black_interval = interval({ min: 3, max: 10 }, makeBlack);
+          countdown_interval = interval(1, reduceonesecond);
+
+          loop(anzahl, (i) => {
+            let pos_x = (W / 100) * rand(20, 80);
+            let pos_y = (H / 100) * rand(20, 80);
+            maus = new Pic("maus.png", null, null, true)
+              .pos(pos_x, pos_y)
+              .sca(0.3)
+              .tap((e) => {
+                if (is_blackphase) {
+                  gameover();
+                } else {
+                  zog("index: " + i);
+                  score = score + 1;
+                  zog("score: " + score);
+                  label_score.removeFrom();
+                  label_score = new Label("Score: " + score).pos(20, 20);
+                  e.target.removeFrom();
+                  S.update();
+                }
+              });
+            maus.wiggle("x", maus.x, 10, 400, 0.8, 2);
+            maus.wiggle("y", maus.y, 10, 400, 0.8, 1.5);
+            Ticker.add(gameOverCheck);
+          });
+        }
+
+        function gameOverCheck() {
+          if (score == anzahl || countdown == 0) {
+            Ticker.remove(gameOverCheck);
+            gameover();
+          }
+        }
+
+        function gameover() {
+          zog("Game Over");
+
+          black_interval.clear();
+          countdown_interval.clear();
+          game_running = false;
+          if (score > highscore) {
+            highscore = score;
+
+            label_highscore.text = "High-Score: " + highscore;
+
+            F.color = black;
+            S.disposeAllChildren();
+            gameoveralltimecheck();
+          }
+        }
+
+        function gameoveralltimecheck() {
+          if (score > alltimehighscore) {
+            container_hs = new Container(W, H).addTo();
+
+            new Label("All-time high score!!!", null, null, white)
+              .centerReg(container_hs)
+              .sca(2)
+              .mov(0, -250);
+
+            new Label("Enter your name: ", null, null, white)
+              .centerReg(container_hs)
+              .mov(0, -100);
+
+            const input = new TextInput().center(container_hs);
+
+            new Button({ label: "SUBMIT" })
+              .center(container_hs)
+              .mov(0, 100)
+              .tap(() => {
+                // enter all-time highscore to mySQL DB and restart page
+                zog(input.text + " " + score);
+                updateData(input.text, score);
+                //timeout(2, () => zgo("https://maus.andierni.ch"));
+              });
+          } else {
+            gameover2();
+          }
+        }
+
+        function gameover2() {
+          F.color = black;
+          S.disposeAllChildren();
+          label_score.removeFrom();
+          container_outro = new Container(W, H).addTo();
+          new Label("GAME OVER", null, null, white)
+            .centerReg(container_outro)
+            .sca(2)
+            .mov(0, -140);
+          new Label("Score: " + score, null, null, white)
+            .centerReg(container_outro)
+            .sca(2)
+            .mov(0, -50);
+          new Button(200, 60, "RESTART")
+            .centerReg(container_outro)
+            .mov(0, 70)
+            .tap(() => {
+              zog("restart pressed");
+              container_outro.removeFrom();
+              start();
+            });
+
+          new Label(
+            "All-time High-Score: " + alltimehighscore + " by " + alltimename,
+            null,
+            null,
+            white
+          )
+            .centerReg(container_outro)
+            .mov(0, 180);
+        }
+      } // end ready
+    </script>
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+  </head>
+  <body></body>
+</html>
